@@ -1,5 +1,7 @@
 import datetime
 import re
+import typing
+
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, select, between, func
@@ -8,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql import text
 import io
 
+from inters import IdbManager
 import config
 
 
@@ -61,7 +64,7 @@ class DataProvider:
         return result[result['date'] != 'Date']
 
 
-class PGdbManager:
+class PGdbManager(IdbManager):
     engine = create_engine(config.dbURL)
     table: Table = Table(config.TABLE, MetaData(), autoload_with=engine)
 
@@ -80,7 +83,7 @@ class PGdbManager:
             conn.commit()
 
     @classmethod
-    def sync_daily_exche(cls, currencies=None):
+    def sync_daily_exche(cls, currencies=None) -> tuple[typing.Any, int]:
         try:
             exchanges = DataProvider.get_daily_exchange()
             data = exchanges.to_dict(orient='records')
@@ -100,7 +103,7 @@ class PGdbManager:
             return 'Synchronization error', 500
 
     @classmethod
-    def sync_exch_range(cls, start_date: str, end_date: str, CURRENCIES):
+    def sync_exch_range(cls, start_date: str, end_date: str, CURRENCIES) -> tuple[typing.Any, int]:
         try:
             start_date, end_date = date_validate_or_today(start_date, end_date)
         except:
@@ -122,7 +125,7 @@ class PGdbManager:
             return 'Synchronization error', 500
 
     @classmethod
-    def get_exch_range(cls, start_date: str, end_date: str, currencies):
+    def get_exch_range(cls, start_date: str, end_date: str, currencies) -> tuple[typing.Any, int]:
         try:
             start_date, end_date = date_validate_or_today(start_date, end_date)
         except:

@@ -4,10 +4,11 @@ from core import PGdbManager, config
 import croniter
 import asyncio
 
+db_manager = PGdbManager
 
 async def sync_daily():
     while True:
-        PGdbManager.sync_daily_exche()
+        db_manager.sync_daily_exche()
         now = datetime.datetime.now()
         print(now, 'Daily data synchronized')
 
@@ -24,7 +25,7 @@ app = Quart(__name__)
 async def sync_exchange():
     start_date = request.args.get('startDate')
     end_date = request.args.get('endDate')
-    answer, code = PGdbManager.sync_exch_range(start_date, end_date, config.CURRENCIES)
+    answer, code = db_manager.sync_exch_range(start_date, end_date, config.CURRENCIES)
     return jsonify(answer), code
 
 
@@ -37,7 +38,7 @@ async def get_exchange():
         currencies = currencies.lower().split(',')
     else:
         currencies = config.CURRENCIES
-    answer, code = PGdbManager.get_exch_range(start_date, end_date, currencies)
+    answer, code = db_manager.get_exch_range(start_date, end_date, currencies)
     return jsonify(answer), code
 
 
