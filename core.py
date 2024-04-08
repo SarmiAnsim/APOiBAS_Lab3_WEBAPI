@@ -1,6 +1,5 @@
 import datetime
 import re
-
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, select, between, func
@@ -9,7 +8,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql import text
 import io
 
-class Data_Provider:
+import config
+
+
+class DataProvider:
     BASE_URL = 'https://www.cnb.cz/en/financial_markets/foreign_exchange_market/exchange_rate_fixing'
 
     @classmethod
@@ -39,9 +41,9 @@ class Data_Provider:
             raise requests.RequestException(f'Нет данных для указанного года {year}')
 
     @classmethod
-    def get_range_exchange(cls, startDate: datetime.date, endDate: datetime.date, CURRENCIES):
+    def get_range_exchange(cls, start_date: datetime.date, end_date: datetime.date, CURRENCIES):
         df_parts = []
-        for year in range(startDate.year, endDate.year + 1):
+        for year in range(start_date.year, end_date.year + 1):
             df = cls.get_year_exchange(year)
             for column in df.columns:
                 if column != 'Date':
@@ -58,12 +60,10 @@ class Data_Provider:
         result = pd.concat(df_parts, axis=0)
         return result[result['date'] != 'Date']
 
-class PGdbManager():
-    # conn = psycopg2.connect(database="exchangerates",
-    #                         user='postgres', password='postgres',
-    #                         host="localhost", port=5432)
-    engine = create_engine('postgresql+psycopg2://postgres:postgres@localhost:5432/exchangerates')
-    table: Table = Table("exchanges", MetaData(), autoload_with=engine)
+
+class PGdbManager:
+    engine = create_engine(config.dbURL)
+    table: Table = Table(config.TABLE, MetaData(), autoload_with=engine)
 
     @classmethod
     def add_columns(cls, columns):
@@ -71,7 +71,7 @@ class PGdbManager():
         if len(currencies) == 0:
             return
         stmt = text(f'''
-        ALTER TABLE exchanges
+        ALTER TABLE {config.TABLE}
         {', '.join([f'ADD COLUMN IF NOT EXISTS {cur} numeric(10, 6) NULL' for cur in currencies])}
         ;''')
         print(f'Columns added to the database: {currencies}')
@@ -79,13 +79,16 @@ class PGdbManager():
             conn.execute(stmt)
             conn.commit()
 
-
     @classmethod
-    def sync_daily_exche(cls):
+    def sync_daily_exche(cls, currencies=None):
         try:
-            exchanges = Data_Provider.get_daily_exchange()
+            exchanges = DataProvider.get_daily_exchange()
             data = exchanges.to_dict(orient='records')
-            insert_vals = {dct['Code'].lower(): dct['Rate']/dct['Amount'] for dct in data}
+            if not currencies:
+                insert_vals = {dct['Code'].lower(): dct['Rate']/dct['Amount'] for dct in data}
+            else:
+                insert_vals = {dct['Code'].lower(): dct['Rate']/dct['Amount'] for dct in data
+                               if dct['Code'].lower() in currencies}
             cls.add_columns(list(insert_vals.keys()))
             insert_vals['date'] = datetime.date.today()
             stmt = insert(cls.table).values(insert_vals).on_conflict_do_nothing()
@@ -97,13 +100,13 @@ class PGdbManager():
             return 'Synchronization error', 500
 
     @classmethod
-    def sync_exch_range(cls, startDate: str, endDate: str, CURRENCIES):
+    def sync_exch_range(cls, start_date: str, end_date: str, CURRENCIES):
         try:
-            startDate, endDate = date_validate_or_today(startDate, endDate)
+            start_date, end_date = date_validate_or_today(start_date, end_date)
         except:
             return 'Incorrect dates entered', 416
         try:
-            exchanges = Data_Provider.get_range_exchange(startDate, endDate, CURRENCIES)
+            exchanges = DataProvider.get_range_exchange(start_date, end_date, CURRENCIES)
             cls.add_columns(exchanges.columns)
             insert_vals = exchanges.to_dict(orient='records')
             stmt = insert(cls.table).values(insert_vals).on_conflict_do_nothing()
@@ -119,9 +122,9 @@ class PGdbManager():
             return 'Synchronization error', 500
 
     @classmethod
-    def get_exch_range(cls, startDate: str, endDate: str, currencies):
+    def get_exch_range(cls, start_date: str, end_date: str, currencies):
         try:
-            startDate, endDate = date_validate_or_today(startDate, endDate)
+            start_date, end_date = date_validate_or_today(start_date, end_date)
         except:
             return 'Incorrect dates entered', 416
         currencies = list(set(currencies) & set(map(lambda col: str(col).split('.')[-1], [*cls.table.c])))
@@ -134,7 +137,7 @@ class PGdbManager():
                                 func.max(cls.table.c[col]).label(col+'_max')])
         s = select(
             *select_cols)\
-            .where(between(cls.table.c.date, startDate, endDate))
+            .where(between(cls.table.c.date, start_date, end_date))
         with cls.engine.connect() as conn:
             exchanges = conn.execute(s)
         result = {}
@@ -144,18 +147,18 @@ class PGdbManager():
         return result, 200
 
 
-def date_validate_or_today(startDate: str, endDate: str):
+def date_validate_or_today(start_date: str, end_date: str):
     try:
-        if not startDate:
-            startDate = datetime.date.today()
+        if not start_date:
+            start_date = datetime.date.today()
         else:
-            startDate = datetime.date.fromisoformat(startDate)
-        if not endDate:
-            endDate = datetime.date.today()
+            start_date = datetime.date.fromisoformat(start_date)
+        if not end_date:
+            end_date = datetime.date.today()
         else:
-            endDate = datetime.date.fromisoformat(endDate)
-        if startDate > endDate:
+            end_date = datetime.date.fromisoformat(end_date)
+        if start_date > end_date:
             raise
     except:
         raise
-    return startDate, endDate
+    return start_date, end_date
