@@ -26,7 +26,7 @@
 Разработан асинхронный WEB-API на базе quart-приложения.
 
 ### Отчет по курсу кроны за период времени:
- - url: `http://{IP}:{PORT}/exchanges/[?startDate=YYYY-MM-DD[&endDate=YYYY-MM-DD[$currencies={code1[,code2[,...]]}]]]`
+ - url: `http://{IP}:{PORT}/exchanges/[?startDate=YYYY-MM-DD[&endDate=YYYY-MM-DD[&currencies={code1[,code2[,...]]}]]]`
     > Формат указания валют - `{code1}[,{code2}[, ...]]`
     
     > Например: `http://127.0.0.1:5000/exchanges/?startDate=2022-08-25&endDate=2023-12-31&currencies=rub,usd`
